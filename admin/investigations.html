@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Cortex AI — Investigations</title>
+    <link rel="stylesheet" href="../css/theme.css">
+    <style>
+        .inv-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 16px;
+        }
+
+        .inv-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            animation: cardEntry 0.4s ease both;
+            transition: all 0.2s ease;
+        }
+
+        .inv-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .inv-card.critical {
+            border-left: 3px solid var(--danger);
+        }
+
+        .inv-card.high {
+            border-left: 3px solid var(--warning);
+        }
+
+        .inv-card.medium {
+            border-left: 3px solid var(--accent);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-layout">
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="UCComponents.toggleSidebar()"></div>
+        <aside class="sidebar" id="sidebar">
+            <div id="sidebar-content"></div>
+        </aside>
+        <div class="main-content">
+            <header class="topbar" id="topbar"></header>
+            <main class="page-content">
+                <div
+                    style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+                    <div>
+                        <div style="font-size:22px;font-weight:900;letter-spacing:-0.5px;">Investigations</div>
+                        <div style="font-size:13px;color:var(--text-secondary);margin-top:3px;">Active cases &amp;
+                            anomaly analysis</div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" onclick="openNewInv()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        New Investigation
+                    </button>
+                </div>
+
+                <!-- Summary -->
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;"
+                    id="inv-stats"></div>
+
+                <!-- Cards -->
+                <div class="inv-grid" id="inv-grid"></div>
+            </main>
+        </div>
+    </div>
+
+    <!-- New Investigation Modal -->
+    <div class="modal-backdrop" id="new-inv-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">New Investigation</div>
+                <button class="modal-close"
+                    onclick="document.getElementById('new-inv-modal').classList.remove('open')">✕</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px;">
+                <div class="input-group"><label class="input-label">Title</label><input class="input" id="inv-title"
+                        placeholder="e.g. Overflow Cluster — Malad Zone"></div>
+                <div class="input-group"><label class="input-label">Priority</label>
+                    <select class="select" id="inv-priority">
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                    </select>
+                </div>
+                <div class="input-group"><label class="input-label">Initial Notes</label><textarea class="input"
+                        id="inv-notes" rows="3" placeholder="Describe the anomaly or issue…"
+                        style="resize:none;"></textarea></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary"
+                    onclick="document.getElementById('new-inv-modal').classList.remove('open')">Cancel</button>
+                <button class="btn btn-primary" onclick="createInvestigation()">Create</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/toast.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/components.js"></script>
+    <script>
+        const user = UCAuth.requireAuth(['admin']);
+        UCComponents.initTheme();
+        document.getElementById('sidebar-content').innerHTML = UCComponents.renderSidebar('investigations');
+        document.getElementById('topbar').innerHTML = UCComponents.renderTopbar('Investigations', 'Active anomalies and cases');
+
+        const statusBadge = { open: 'badge-danger', reviewing: 'badge-accent', assigned: 'badge-purple', closed: 'badge-success' };
+        const priorityLabel = { critical: '🔴 Critical', high: '🟡 High', medium: '🔵 Medium' };
+
+        function renderStats() {
+            const invs = UCData.investigations;
+            const stats = [
+                { label: 'Total Cases', val: invs.length, icon: '🔍', cls: 'stat-accent' },
+                { label: 'Open', val: invs.filter(i => i.status === 'open').length, icon: '🔴', cls: 'stat-danger' },
+                { label: 'Reviewing', val: invs.filter(i => i.status === 'reviewing').length, icon: '🔵', cls: 'stat-warning' },
+                { label: 'Assigned', val: invs.filter(i => i.status === 'assigned').length, icon: '📌', cls: 'stat-purple' }
+            ];
+            document.getElementById('inv-stats').innerHTML = stats.map((s, i) => `
+      <div class="stat-card ${s.cls}" style="animation:cardEntry 0.4s ${i * 0.07}s ease both;padding:16px;">
+        <div style="font-size:20px;margin-bottom:8px;">${s.icon}</div>
+        <div class="stat-value" style="font-size:26px;">${s.val}</div>
+        <div class="stat-label">${s.label}</div>
+      </div>`).join('');
+        }
+
+        function renderCards() {
+            document.getElementById('inv-grid').innerHTML = UCData.investigations.map((inv, i) => `
+      <div class="inv-card ${inv.priority}" style="animation-delay:${i * 0.08}s;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+          <span class="badge ${statusBadge[inv.status] || 'badge-muted'}">${inv.status}</span>
+          <span style="font-size:12px;color:var(--text-muted);">${UCData.formatTime(inv.openedAt)}</span>
+        </div>
+        <div style="font-size:15px;font-weight:700;margin-bottom:6px;line-height:1.3;">${inv.title}</div>
+        <div style="font-size:12px;color:var(--text-secondary);line-height:1.5;margin-bottom:14px;">${inv.notes}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <span class="badge ${inv.priority === 'critical' ? 'badge-danger' : inv.priority === 'high' ? 'badge-warning' : 'badge-accent'}" style="font-size:11px;">${priorityLabel[inv.priority]}</span>
+          ${inv.binCount > 0 ? `<span style="font-size:12px;color:var(--text-muted);">🗑️ ${inv.binCount} bins affected</span>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:14px;">
+          <button class="btn btn-secondary btn-xs" style="flex:1;justify-content:center;" onclick="toast.info('${inv.id}','Opening investigation view…',2000)">View Details</button>
+          ${inv.status !== 'closed' ? `<button class="btn btn-primary btn-xs" style="flex:1;justify-content:center;" onclick="markStatus('${inv.id}','reviewing')">Mark Reviewing</button>` : ''}
+        </div>
+      </div>`).join('');
+        }
+
+        function markStatus(id, status) {
+            const inv = UCData.investigations.find(i => i.id === id);
+            if (inv) inv.status = status;
+            toast.success('Investigation updated', `${id} marked as ${status}`, 3000);
+            renderStats(); renderCards();
+        }
+
+        function openNewInv() {
+            document.getElementById('new-inv-modal').classList.add('open');
+        }
+
+        function createInvestigation() {
+            const title = document.getElementById('inv-title').value.trim();
+            if (!title) { toast.error('Validation', 'Please enter a title', 3000); return; }
+            const newInv = {
+                id: `INV-00${UCData.investigations.length + 1}`,
+                title, priority: document.getElementById('inv-priority').value,
+                status: 'open', binCount: 0,
+                openedAt: new Date().toISOString(),
+                notes: document.getElementById('inv-notes').value || 'No notes added.'
+            };
+            UCData.investigations.unshift(newInv);
+            document.getElementById('new-inv-modal').classList.remove('open');
+            toast.success('Investigation created', `${newInv.id} opened successfully`, 3000);
+            renderStats(); renderCards();
+        }
+
+        renderStats(); renderCards();
+    </script>
+</body>
+
+</html>

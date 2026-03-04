@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Cortex AI — Public Map</title>
+    <meta name="description"
+        content="Track waste collection status in your city. Report issues and monitor bin levels in real time.">
+    <link rel="stylesheet" href="../css/theme.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        .citizen-header {
+            background: linear-gradient(135deg, #0F172A 0%, #0F3460 60%, #1E293B 100%);
+            color: white;
+            padding: 20px 24px;
+        }
+
+        [data-theme="dark"] .citizen-header {
+            background: linear-gradient(135deg, #0B1120 0%, #0F172A 100%);
+        }
+
+        .citizen-title {
+            font-size: 26px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+        }
+
+        .citizen-sub {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-top: 4px;
+        }
+
+        .citizen-layout {
+            display: grid;
+            grid-template-columns: 1fr 360px;
+            gap: 0;
+            height: calc(100vh - 140px);
+        }
+
+        @media (max-width: 900px) {
+            .citizen-layout {
+                grid-template-columns: 1fr;
+                height: auto;
+            }
+
+            .citizen-side {
+                display: none;
+            }
+        }
+
+        #citizen-map {
+            height: 100%;
+        }
+
+        .citizen-side {
+            overflow-y: auto;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+        }
+
+        .filter-strip {
+            display: flex;
+            gap: 6px;
+            padding: 14px 20px 10px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-secondary);
+        }
+
+        .complaint-status-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .complaint-status-item:last-child {
+            border-bottom: none;
+        }
+
+        .countdown-badge {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: var(--danger);
+            color: white;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 100px;
+            border: 2px solid white;
+            animation: pulseDot 1.5s ease-in-out infinite;
+        }
+
+        .public-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 24px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+
+        .overflow-marker {
+            position: relative;
+        }
+
+        .map-wrap {
+            height: calc(100vh - 200px);
+        }
+
+        @media (max-width: 900px) {
+            .map-wrap {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Header -->
+    <header class="citizen-header">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+                    <span style="font-size:28px;">🏙️</span>
+                    <div class="citizen-title">Urban Cortex AI</div>
+                </div>
+                <div class="citizen-sub">Live Smart Waste Map · Mumbai · Public View</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <div
+                    style="display:flex;align-items:center;gap:6px;background:rgba(34,197,94,0.2);border:1px solid rgba(34,197,94,0.3);border-radius:100px;padding:6px 12px;">
+                    <span
+                        style="width:7px;height:7px;border-radius:50%;background:#22C55E;animation:pulseDot 1.4s ease-in-out infinite;display:inline-block;"></span>
+                    <span style="font-size:12px;color:#4ADE80;font-weight:700;">LIVE</span>
+                </div>
+                <button class="btn" onclick="UCComponents.toggleTheme()"
+                    style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:white;padding:8px 12px;">🌙</button>
+                <button class="btn" onclick="openComplaintModal()"
+                    style="background:#3B82F6;border:none;color:white;padding:8px 14px;font-weight:700;">📢 Report
+                    Issue</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Nav bar with filters -->
+    <div class="public-nav">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;" id="filter-bar">
+            <button class="chip active" onclick="filterBins('all',this)">🗺️ All Bins</button>
+            <button class="chip" onclick="filterBins('overflow',this)">🔴 Overflow</button>
+            <button class="chip" onclick="filterBins('high',this)">🟡 High Fill</button>
+            <button class="chip" onclick="filterBins('moderate',this)">🔵 Moderate</button>
+            <button class="chip" onclick="filterBins('low',this)">🟢 Low Fill</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-secondary);">
+            <span>🗑️ <b id="bin-count">20</b> bins tracked</span>
+            <span>⚠️ <b id="overflow-count" style="color:var(--danger);">4</b> overflowing</span>
+        </div>
+    </div>
+
+    <!-- Body: Map + Side Panel -->
+    <div class="citizen-layout">
+        <!-- Map -->
+        <div>
+            <div class="map-wrap">
+                <div id="citizen-map"></div>
+            </div>
+        </div>
+
+        <!-- Side Panel -->
+        <div class="citizen-side">
+            <!-- Overflow Alerts -->
+            <div
+                style="padding:14px 16px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+                <span>⚠️ Active Overflow Alerts</span>
+                <span class="badge badge-danger" id="overflow-badge">4</span>
+            </div>
+            <div id="overflow-list"></div>
+
+            <!-- My Complaints -->
+            <div
+                style="padding:14px 16px 8px;font-size:13px;font-weight:700;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+                <span>📋 My Complaints</span>
+                <button class="btn btn-primary btn-xs" onclick="openComplaintModal()">+ New</button>
+            </div>
+            <div id="my-complaints"></div>
+        </div>
+    </div>
+
+    <!-- Complaint Form Modal -->
+    <div class="modal-backdrop" id="complaint-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title">📢 Report an Issue</div>
+                    <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">Help us keep the city clean
+                    </div>
+                </div>
+                <button class="modal-close" onclick="closeComplaintModal()">✕</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px;">
+                <div class="input-group">
+                    <label class="input-label">Your Name</label>
+                    <input class="input" id="cmp-name" placeholder="e.g. Aditya Verma" value="Aditya Verma">
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Zone / Location</label>
+                    <select class="select" id="cmp-zone">
+                        <option>Andheri East</option>
+                        <option>Bandra West</option>
+                        <option>Dadar</option>
+                        <option>Kurla</option>
+                        <option>Santacruz</option>
+                        <option>Ghatkopar</option>
+                        <option>Vile Parle</option>
+                        <option>Malad</option>
+                        <option>Borivali</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Issue Type</label>
+                    <select class="select" id="cmp-type">
+                        <option>Overflow</option>
+                        <option>Missed Pickup</option>
+                        <option>Damaged Bin</option>
+                        <option>Illegal Dumping</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Description</label>
+                    <textarea class="input" id="cmp-desc" rows="3" placeholder="Describe the issue clearly…"
+                        style="resize:none;"></textarea>
+                </div>
+                <div
+                    style="background:var(--accent-light);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--accent);">
+                    📍 Your location will be auto-tagged from your selected zone.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeComplaintModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitComplaint()">Submit Report</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Complaint Submitted Modal -->
+    <div class="modal-backdrop" id="success-modal">
+        <div class="modal" style="text-align:center;max-width:360px;">
+            <div style="font-size:48px;margin-bottom:16px;">✅</div>
+            <div style="font-size:20px;font-weight:900;margin-bottom:8px;">Report Submitted!</div>
+            <div style="font-size:14px;color:var(--text-secondary);margin-bottom:20px;" id="success-cmp-id">Your
+                complaint has been logged.</div>
+            <div
+                style="background:var(--success-light);border-radius:10px;padding:14px;margin-bottom:20px;text-align:left;">
+                <div style="font-size:13px;font-weight:700;color:var(--success);">What happens next?</div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:6px;line-height:1.6;">
+                    1. Our team reviews your report within 2 hours<br>
+                    2. An investigation case is opened if needed<br>
+                    3. A truck is dispatched to resolve overflow issues<br>
+                    4. You can track status in "My Complaints"
+                </div>
+            </div>
+            <button class="btn btn-primary w-full"
+                onclick="document.getElementById('success-modal').classList.remove('open')"
+                style="justify-content:center;">Done</button>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/toast.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/simulation.js"></script>
+    <script src="../js/components.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        UCComponents.initTheme();
+
+        // Citizen tracking (no login required for public view)
+        const citizenComplaints = JSON.parse(localStorage.getItem('citizen_complaints') || '[]');
+
+        // Map
+        const cMap = L.map('citizen-map').setView([19.076, 72.877], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(cMap);
+
+        let binMarkers = {};
+        let currentFilter = 'all';
+
+        function getBinCountdownHtml(bin) {
+            const hrs = parseFloat(bin.prediction) || 1;
+            const mins = Math.round(hrs * 60);
+            return mins < 60 ? `${mins}m` : `${hrs}h`;
+        }
+
+        UCData.bins.forEach(bin => {
+            const color = UCData.getBinColor(bin.status);
+            const isOverflow = bin.status === 'overflow';
+            const icon = L.divIcon({
+                className: '',
+                html: `<div style="position:relative;display:inline-block;">
+        <div style="width:16px;height:16px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>
+        ${isOverflow ? `<div style="position:absolute;top:-12px;right:-14px;background:#EF4444;color:white;font-size:9px;font-weight:700;padding:1px 4px;border-radius:100px;border:1.5px solid white;white-space:nowrap;">${getBinCountdownHtml(bin)}</div>` : ''}
+      </div>`,
+                iconSize: [16, 16], iconAnchor: [8, 8]
+            });
+
+            const marker = L.marker([bin.lat, bin.lng], { icon })
+                .bindPopup(`
+        <div style="font-family:Inter,sans-serif;min-width:180px;">
+          <div style="font-weight:800;font-size:13px;margin-bottom:4px;">${bin.id}</div>
+          <div style="font-size:12px;color:#64748B;margin-bottom:8px;">📍 ${bin.zone}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <div style="flex:1;height:7px;border-radius:100px;background:#E2E8F0;overflow:hidden;">
+              <div style="height:100%;width:${bin.fill}%;background:${color};border-radius:100px;"></div>
+            </div>
+            <span style="font-size:12px;font-weight:700;color:${color};">${bin.fill}%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+            <span class="badge" style="background:${color}20;color:${color};padding:3px 8px;border-radius:100px;font-size:11px;font-weight:600;">${bin.status}</span>
+            <span style="font-size:11px;color:#94A3B8;">↻ ${bin.prediction}</span>
+          </div>
+          ${bin.status === 'overflow' ? `<div style="background:#FEF2F2;border-radius:6px;padding:6px 8px;font-size:11px;color:#EF4444;font-weight:600;">⚠️ Overflow — Urgent collection needed</div>` : ''}
+          <button onclick="openComplaintModal('${bin.zone}')" style="width:100%;margin-top:8px;padding:7px;background:#3B82F6;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">📢 Report Issue Here</button>
+        </div>`, { maxWidth: 220 })
+                .addTo(cMap);
+            binMarkers[bin.id] = { marker, bin };
+        });
+
+        function filterBins(status, btn) {
+            currentFilter = status;
+            document.querySelectorAll('#filter-bar .chip').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            Object.values(binMarkers).forEach(({ marker, bin }) => {
+                if (status === 'all' || bin.status === status) marker.addTo(cMap);
+                else cMap.removeLayer(marker);
+            });
+        }
+
+        // Overflow list
+        function renderOverflowList() {
+            const overflowBins = UCData.bins.filter(b => b.status === 'overflow' || b.status === 'high');
+            document.getElementById('overflow-list').innerHTML = overflowBins.map(b => {
+                const color = UCData.getBinColor(b.status);
+                return `
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="cMap.setView([${b.lat},${b.lng}],16)">
+          <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;${b.status === 'overflow' ? 'animation:pulseDot 1.4s ease-in-out infinite;' : ''}"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${b.id} · ${b.zone}</div>
+            <div style="font-size:11px;color:var(--text-muted);">Fill: ${b.fill}% · Overflow in ${b.prediction}</div>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:${color};">${b.fill}%</span>
+        </div>`;
+            }).join('');
+            document.getElementById('overflow-count').textContent = UCData.bins.filter(b => b.status === 'overflow').length;
+            document.getElementById('overflow-badge').textContent = overflowBins.length;
+            document.getElementById('bin-count').textContent = UCData.bins.length;
+        }
+        renderOverflowList();
+
+        // My Complaints
+        function renderMyComplaints() {
+            const el = document.getElementById('my-complaints');
+            if (!citizenComplaints.length) {
+                el.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No complaints submitted yet.</div>`;
+                return;
+            }
+            el.innerHTML = citizenComplaints.map(c => `
+      <div class="complaint-status-item">
+        <div style="width:8px;height:8px;border-radius:50%;margin-top:5px;background:${c.status === 'resolved' ? '#22C55E' : c.status === 'investigating' ? '#F59E0B' : '#EF4444'};flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:600;">${c.type} · ${c.zone}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${c.id} · Submitted ${c.timeAgo}</div>
+          <span class="badge ${UCData.getStatusBadge(c.status)}" style="margin-top:5px;">${c.status}</span>
+        </div>
+      </div>`).join('');
+        }
+        renderMyComplaints();
+
+        // Complaint modal
+        function openComplaintModal(zone) {
+            if (zone) {
+                const sel = document.getElementById('cmp-zone');
+                if (sel) { for (let opt of sel.options) { if (opt.value === zone || opt.text === zone) { sel.value = opt.value; break; } } }
+            }
+            document.getElementById('complaint-modal').classList.add('open');
+        }
+        function closeComplaintModal() { document.getElementById('complaint-modal').classList.remove('open'); }
+
+        function submitComplaint() {
+            const name = document.getElementById('cmp-name').value.trim();
+            const zone = document.getElementById('cmp-zone').value;
+            const type = document.getElementById('cmp-type').value;
+            const desc = document.getElementById('cmp-desc').value.trim();
+            if (!name || !desc) { toast.warning('Missing info', 'Please fill in your name and description', 3000); return; }
+
+            const id = 'CMP-' + String(900 + citizenComplaints.length + 1);
+            const newCmp = { id, citizen: name, zone, type, desc, status: 'open', timeAgo: 'just now' };
+            citizenComplaints.unshift(newCmp);
+            UCData.complaints.push({ ...newCmp, date: new Date().toISOString(), priority: type === 'Overflow' ? 'high' : 'medium' });
+            localStorage.setItem('citizen_complaints', JSON.stringify(citizenComplaints));
+
+            closeComplaintModal();
+            document.getElementById('success-cmp-id').textContent = `Complaint ${id} has been logged successfully.`;
+            document.getElementById('success-modal').classList.add('open');
+            renderMyComplaints();
+        }
+
+        // Simulation
+        UCSimulation.on('binUpdated', ({ bin }) => {
+            const entry = binMarkers[bin.id];
+            if (!entry) return;
+            const color = UCData.getBinColor(bin.status);
+            entry.bin = bin;
+            const isOverflow = bin.status === 'overflow';
+            const icon = L.divIcon({
+                className: '',
+                html: `<div style="position:relative;display:inline-block;"><div style="width:16px;height:16px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>${isOverflow ? `<div style="position:absolute;top:-12px;right:-14px;background:#EF4444;color:white;font-size:9px;font-weight:700;padding:1px 4px;border-radius:100px;border:1.5px solid white;">${getBinCountdownHtml(bin)}</div>` : ''}</div>`,
+                iconSize: [16, 16], iconAnchor: [8, 8]
+            });
+            entry.marker.setIcon(icon);
+            if (currentFilter !== 'all' && bin.status !== currentFilter) cMap.removeLayer(entry.marker);
+            else entry.marker.addTo(cMap);
+        });
+
+        UCSimulation.on('metricsUpdated', () => { renderOverflowList(); });
+
+        UCSimulation.start();
+
+        // Login link
+        window.goToLogin = () => { window.location.href = '../index.html'; };
+    </script>
+</body>
+
+</html>

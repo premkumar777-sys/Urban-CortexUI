@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Cortex AI — Driver Dashboard</title>
+    <link rel="stylesheet" href="../css/theme.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        .driver-layout {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 1000px) {
+            .driver-layout {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .driver-topbar {
+            background: linear-gradient(135deg, #0F172A, #1E3A5F);
+            color: white;
+            border: none;
+        }
+
+        [data-theme="dark"] .driver-topbar {
+            background: linear-gradient(135deg, #0B1120, #162032);
+        }
+
+        .driver-topbar .topbar-title {
+            color: white;
+        }
+
+        .driver-topbar .icon-btn {
+            border-color: rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .driver-topbar .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .driver-topbar .avatar {
+            background: linear-gradient(135deg, #60A5FA, #A78BFA);
+        }
+
+        .driver-topbar .select {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .driver-sidebar {
+            background: var(--bg-secondary);
+            border-right: none;
+        }
+
+        .route-card {
+            background: linear-gradient(135deg, #EFF6FF, #F5F3FF);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        [data-theme="dark"] .route-card {
+            background: linear-gradient(135deg, #1E3A5F, #2E1065);
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        .ring-svg {
+            transform: rotate(-90deg);
+        }
+
+        .timeline-stop {
+            display: flex;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .timeline-stop:last-child {
+            border-bottom: none;
+        }
+
+        .timeline-stop.collected {
+            opacity: 0.5;
+        }
+
+        .timeline-stop.collected .stop-number {
+            background: var(--success);
+            color: white;
+        }
+
+        .stop-number {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        #driver-map {
+            height: 100%;
+            min-height: 420px;
+            border-radius: var(--radius-lg);
+        }
+
+        .start-btn {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            justify-content: center;
+            border-radius: var(--radius-md);
+            letter-spacing: 0.2px;
+        }
+
+        .status-bar {
+            background: var(--bg-tertiary);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-layout">
+        <div class="main-content">
+            <header class="topbar driver-topbar" id="topbar"></header>
+            <main class="page-content">
+                <div class="driver-layout">
+                    <!-- Left Panel -->
+                    <div style="display:flex;flex-direction:column;gap:16px;">
+                        <!-- Route Card -->
+                        <div class="route-card">
+                            <div
+                                style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+                                <div>
+                                    <div style="font-size:16px;font-weight:800;color:var(--text-primary);">Active Route
+                                    </div>
+                                    <div style="font-size:13px;color:var(--accent);font-weight:600;margin-top:2px;">
+                                        RTE-001 · North Mumbai</div>
+                                </div>
+                                <span class="badge badge-success" id="route-status-badge">Active</span>
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                                <div
+                                    style="padding:10px;background:var(--bg-secondary);border-radius:10px;text-align:center;border:1px solid var(--border);">
+                                    <div style="font-size:20px;font-weight:900;" id="bins-done">4</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">Collected</div>
+                                </div>
+                                <div
+                                    style="padding:10px;background:var(--bg-secondary);border-radius:10px;text-align:center;border:1px solid var(--border);">
+                                    <div style="font-size:20px;font-weight:900;">8</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">Total Stops</div>
+                                </div>
+                                <div
+                                    style="padding:10px;background:var(--bg-secondary);border-radius:10px;text-align:center;border:1px solid var(--border);">
+                                    <div style="font-size:20px;font-weight:900;">9.1</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">km Optimized</div>
+                                </div>
+                                <div
+                                    style="padding:10px;background:var(--bg-secondary);border-radius:10px;text-align:center;border:1px solid var(--border);">
+                                    <div style="font-size:20px;font-weight:900;">14:30</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">ETA</div>
+                                </div>
+                            </div>
+                            <button class="btn btn-success start-btn" id="start-btn" onclick="toggleRoute()">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <polygon points="5 3 19 12 5 21 5 3" />
+                                </svg>
+                                Start Route
+                            </button>
+                        </div>
+
+                        <!-- Capacity Ring -->
+                        <div class="card" style="text-align:center;padding:24px;">
+                            <div style="font-size:14px;font-weight:700;margin-bottom:16px;">Truck Capacity</div>
+                            <div class="ring-wrap" style="margin:0 auto;">
+                                <svg width="160" height="160" class="ring-svg">
+                                    <circle cx="80" cy="80" r="68" fill="none" stroke="var(--border)"
+                                        stroke-width="10" />
+                                    <circle id="capacity-ring" cx="80" cy="80" r="68" fill="none" stroke="var(--accent)"
+                                        stroke-width="10" stroke-dasharray="427" stroke-dashoffset="427"
+                                        stroke-linecap="round"
+                                        style="transition: stroke-dashoffset 1.2s ease, stroke 0.5s ease;" />
+                                </svg>
+                                <div class="ring-label">
+                                    <div style="font-size:28px;font-weight:900;" id="cap-pct">65%</div>
+                                    <div style="font-size:11px;color:var(--text-muted);">Capacity</div>
+                                </div>
+                            </div>
+                            <div class="status-bar" style="margin-top:16px;">
+                                <span style="color:var(--text-secondary);">Status:</span>
+                                <span style="font-weight:700;color:var(--accent);" id="truck-status-label">On
+                                    Route</span>
+                            </div>
+                        </div>
+
+                        <!-- Route Timeline -->
+                        <div class="card" style="padding:16px;">
+                            <div style="font-size:14px;font-weight:700;margin-bottom:12px;">Route Timeline</div>
+                            <div id="timeline"></div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Map -->
+                    <div class="card" style="padding:16px;display:flex;flex-direction:column;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                            <div>
+                                <div style="font-size:15px;font-weight:700;">Live Route Map</div>
+                                <div style="font-size:12px;color:var(--text-secondary);">Auto-centering on your position
+                                </div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span class="badge badge-success"
+                                    style="display:inline-flex;align-items:center;gap:5px;">
+                                    <span
+                                        style="width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulseDot 1.4s ease-in-out infinite;"></span>
+                                    Live
+                                </span>
+                                <button class="btn btn-secondary btn-xs"
+                                    onclick="driverMap.setView([truck.lat, truck.lng], 15)">Center</button>
+                            </div>
+                        </div>
+                        <div style="flex:1;">
+                            <div id="driver-map"></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    <script src="../js/auth.js"></script>
+    <script src="../js/toast.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/simulation.js"></script>
+    <script src="../js/components.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const user = UCAuth.requireAuth(['admin', 'driver']);
+        UCComponents.initTheme();
+
+        // Driver topbar (simplified)
+        document.getElementById('topbar').innerHTML = `
+    <div>
+      <div style="font-size:16px;font-weight:800;color:white;">🚛 TRK-001</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6);">${user?.name || 'Priya Sharma'} · Active Route</div>
+    </div>
+    <div style="flex:1;"></div>
+    <span style="font-size:21px;cursor:pointer;" onclick="UCComponents.toggleTheme()">🌙</span>
+    <button class="btn btn-secondary btn-sm" onclick="UCAuth.logout()" style="background:rgba(255,255,255,0.1);border-color:rgba(255,255,255,0.2);color:white;">Logout</button>`;
+
+        const truck = UCData.trucks[0];
+        const route = UCData.routes[0];
+        let routeActive = false;
+        let collected = truck.binsCollected;
+        let capacity = truck.capacity;
+
+        // Capacity ring (circumference = 2π × 68 ≈ 427.3)
+        function updateRing(pct) {
+            const ring = document.getElementById('capacity-ring');
+            const offset = 427.3 * (1 - pct / 100);
+            ring.style.strokeDashoffset = offset;
+            const color = pct > 80 ? '#EF4444' : pct > 50 ? '#F59E0B' : '#3B82F6';
+            ring.style.stroke = color;
+            document.getElementById('cap-pct').textContent = Math.round(pct) + '%';
+        }
+        setTimeout(() => updateRing(capacity), 100);
+
+        // Timeline
+        const stops = ['BIN-001 (Andheri East)', 'BIN-004 (Kurla)', 'BIN-009 (Vile Parle)', 'BIN-011 (Vikhroli)', 'BIN-013 (Jogeshwari)', 'BIN-016 (Powai)', 'BIN-018 (Borivali)', 'BIN-020 (Malad)'];
+        function renderTimeline(done) {
+            document.getElementById('timeline').innerHTML = stops.map((s, i) => `
+      <div class="timeline-stop ${i < done ? 'collected' : ''}">
+        <div class="stop-number">${i < done ? '✓' : i + 1}</div>
+        <div>
+          <div style="font-size:13px;font-weight:${i === done ? '700' : '500'};">${s}</div>
+          <div style="font-size:11px;color:var(--text-muted);">${i < done ? 'Collected' : i === done ? 'Next stop' : 'Pending'}</div>
+        </div>
+      </div>`).join('');
+        }
+        renderTimeline(collected);
+
+        // Map
+        const driverMap = L.map('driver-map').setView([truck.lat, truck.lng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(driverMap);
+
+        // Route polyline with animation effect
+        const routeLine = L.polyline(route.waypoints, { color: '#3B82F6', weight: 4, opacity: 0.8, dashArray: '10 5' }).addTo(driverMap);
+
+        // Truck marker
+        const truckIcon = L.divIcon({ className: '', html: `<div style="width:28px;height:28px;border-radius:8px;background:#3B82F6;border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:14px;">🚛</div>`, iconSize: [28, 28], iconAnchor: [14, 14] });
+        let truckMarker = L.marker([truck.lat, truck.lng], { icon: truckIcon }).addTo(driverMap);
+
+        // Bin markers on driver map
+        route.bins.forEach((binId, i) => {
+            const bin = UCData.bins.find(b => b.id === binId);
+            if (!bin) return;
+            const isDone = i < collected;
+            const icon = L.divIcon({
+                className: '',
+                html: `<div style="width:14px;height:14px;border-radius:50%;background:${isDone ? '#22C55E' : UCData.getBinColor(bin.status)};border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3);opacity:${isDone ? 0.4 : 1};transition:all 0.5s;"></div>`,
+                iconSize: [14, 14], iconAnchor: [7, 7]
+            });
+            L.marker([bin.lat, bin.lng], { icon }).bindPopup(`${binId} · ${bin.zone}<br>Fill: ${bin.fill}%`).addTo(driverMap);
+        });
+
+        // Start/Pause route
+        function toggleRoute() {
+            routeActive = !routeActive;
+            const btn = document.getElementById('start-btn');
+            const badge = document.getElementById('route-status-badge');
+            const label = document.getElementById('truck-status-label');
+            if (routeActive) {
+                btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Pause Route`;
+                btn.className = 'btn btn-secondary start-btn';
+                badge.textContent = 'On Route'; badge.className = 'badge badge-accent';
+                label.textContent = 'On Route'; label.style.color = 'var(--accent)';
+                toast.info('Route started', 'Navigate to BIN-001 (Andheri East)', 4000);
+                UCSimulation.start();
+            } else {
+                btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Resume Route`;
+                btn.className = 'btn btn-success start-btn';
+                badge.textContent = 'Paused'; badge.className = 'badge badge-warning';
+                label.textContent = 'Paused'; label.style.color = 'var(--warning)';
+                UCSimulation.stop();
+            }
+        }
+
+        UCSimulation.on('truckMoved', ({ truck: t }) => {
+            if (t.id === 'TRK-001') {
+                truckMarker.setLatLng([t.lat, t.lng]);
+                driverMap.setView([t.lat, t.lng], driverMap.getZoom());
+            }
+        });
+
+        UCSimulation.on('routeProgress', ({ truck: t }) => {
+            if (t.id === 'TRK-001') {
+                collected = t.binsCollected;
+                capacity = t.capacity;
+                document.getElementById('bins-done').textContent = collected;
+                updateRing(capacity);
+                renderTimeline(collected);
+                if (collected >= stops.length) {
+                    toast.success('Route Complete!', 'All bins collected. Return to depot.', 0);
+                } else {
+                    toast.info('Bin collected', `Heading to stop ${collected + 1}: ${stops[collected]}`, 3000);
+                }
+            }
+        });
+    </script>
+</body>
+
+</html>
