@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Cortex AI — Admin Overview</title>
+    <link rel="stylesheet" href="../css/theme.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 1400px) {
+            .kpi-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        .bottom-row {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        @media (max-width: 1100px) {
+            .bottom-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        #main-map {
+            height: 400px;
+        }
+
+        .activity-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .kpi-card {
+            animation-delay: calc(var(--i) * 0.07s);
+            opacity: 0;
+            animation: cardEntry 0.45s ease forwards;
+        }
+
+        .map-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--success);
+        }
+
+        .live-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulseDot 1.4s ease-in-out infinite;
+        }
+
+        .export-modal .modal {
+            max-width: 380px;
+        }
+
+        .overview-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .page-title {
+            font-size: 22px;
+            font-weight: 900;
+            letter-spacing: -0.5px;
+        }
+
+        .page-sub {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 3px;
+        }
+
+        .map-legend {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .truck-marker {
+            background: #3B82F6;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .summary-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        @media (max-width: 900px) {
+            .summary-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="app-layout">
+        <!-- Sidebar overlay (mobile) -->
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="UCComponents.toggleSidebar()"></div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div id="sidebar-content"></div>
+        </aside>
+
+        <!-- Main -->
+        <div class="main-content">
+            <header class="topbar" id="topbar"></header>
+
+            <main class="page-content">
+                <!-- Header -->
+                <div class="overview-header">
+                    <div>
+                        <div class="page-title">Overview</div>
+                        <div class="page-sub">Live intelligence for Mumbai · Updated <span id="last-update">just
+                                now</span></div>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button class="btn btn-secondary btn-sm" onclick="openExportModal()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            Export
+                        </button>
+                        <button class="btn btn-primary btn-sm"
+                            onclick="toast.info('Route generation','AI is computing optimal routes…',3000)">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polygon points="5 3 19 12 5 21 5 3" />
+                            </svg>
+                            Generate Routes
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="kpi-grid" id="kpi-grid">
+                    <!-- Injected by JS -->
+                </div>
+
+                <!-- Summary Stats -->
+                <div class="summary-row">
+                    <div class="card" style="display:flex;align-items:center;gap:14px;padding:16px;">
+                        <div
+                            style="width:42px;height:42px;border-radius:10px;background:var(--success-light);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+                            🌱</div>
+                        <div>
+                            <div style="font-size:22px;font-weight:900;color:var(--text-primary);" id="co2-val">124.6 kg
+                            </div>
+                            <div style="font-size:12px;color:var(--text-secondary);">CO₂ saved today</div>
+                        </div>
+                    </div>
+                    <div class="card" style="display:flex;align-items:center;gap:14px;padding:16px;">
+                        <div
+                            style="width:42px;height:42px;border-radius:10px;background:var(--accent-light);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+                            🛣️</div>
+                        <div>
+                            <div style="font-size:22px;font-weight:900;color:var(--text-primary);">3 / 3</div>
+                            <div style="font-size:12px;color:var(--text-secondary);">Routes optimized</div>
+                        </div>
+                    </div>
+                    <div class="card" style="display:flex;align-items:center;gap:14px;padding:16px;">
+                        <div
+                            style="width:42px;height:42px;border-radius:10px;background:var(--warning-light);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">
+                            ⚠️</div>
+                        <div>
+                            <div style="font-size:22px;font-weight:900;color:var(--text-primary);" id="alert-val">4
+                            </div>
+                            <div style="font-size:12px;color:var(--text-secondary);">Overflow alerts active</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Map + Activity Feed -->
+                <div class="bottom-row">
+                    <!-- Live Map -->
+                    <div class="card" style="padding:16px;">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Live Map</div>
+                                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px;">Real-time bin &
+                                    truck locations</div>
+                            </div>
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <span class="live-badge"><span class="live-dot"></span> Live</span>
+                                <div class="map-legend">
+                                    <span class="legend-item"><span class="legend-dot"
+                                            style="background:#EF4444;"></span>Overflow</span>
+                                    <span class="legend-item"><span class="legend-dot"
+                                            style="background:#F59E0B;"></span>High</span>
+                                    <span class="legend-item"><span class="legend-dot"
+                                            style="background:#3B82F6;"></span>Moderate</span>
+                                    <span class="legend-item"><span class="legend-dot"
+                                            style="background:#22C55E;"></span>Low</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Bin filter -->
+                        <div class="map-toolbar" style="margin-bottom:12px;gap:6px;">
+                            <span style="font-size:12px;font-weight:600;color:var(--text-muted);">Filter:</span>
+                            <button class="chip active" id="filter-all" onclick="filterMap('all',this)">All
+                                Bins</button>
+                            <button class="chip" id="filter-overflow" onclick="filterMap('overflow',this)">🔴
+                                Overflow</button>
+                            <button class="chip" id="filter-high" onclick="filterMap('high',this)">🟡 High</button>
+                            <button class="chip" id="filter-moderate" onclick="filterMap('moderate',this)">🔵
+                                Moderate</button>
+                            <button class="chip" id="filter-low" onclick="filterMap('low',this)">🟢 Low</button>
+                        </div>
+                        <div id="main-map" class="map-container"></div>
+                    </div>
+
+                    <!-- Activity Feed -->
+                    <div class="card" style="padding:16px;">
+                        <div class="card-header">
+                            <div class="card-title">Activity Feed</div>
+                            <div class="refresh-ring" id="feed-ring"></div>
+                        </div>
+                        <div class="activity-list" id="activity-feed"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Export Modal -->
+    <div class="modal-backdrop export-modal" id="export-modal">
+        <div class="modal" style="max-width:360px;">
+            <div class="modal-header">
+                <div>
+                    <div class="modal-title">Export Report</div>
+                    <div style="font-size:13px;color:var(--text-secondary);margin-top:4px;">Choose format & date range
+                    </div>
+                </div>
+                <button class="modal-close" onclick="closeExportModal()">✕</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px;">
+                <div class="input-group">
+                    <label class="input-label">Report Type</label>
+                    <select class="select" id="export-type">
+                        <option>Daily Operations Summary</option>
+                        <option>Fleet Performance Report</option>
+                        <option>Bin Fill Analytics</option>
+                        <option>Complaint Resolution Report</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Format</label>
+                    <select class="select" id="export-format">
+                        <option>PDF</option>
+                        <option>CSV</option>
+                        <option>Excel (.xlsx)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label class="input-label">Date Range</label>
+                    <select class="select">
+                        <option>Today</option>
+                        <option>Last 7 days</option>
+                        <option>Last 30 days</option>
+                        <option>Custom</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeExportModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="handleExport()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Download
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/auth.js"></script>
+    <script src="../js/toast.js"></script>
+    <script src="../js/data.js"></script>
+    <script src="../js/simulation.js"></script>
+    <script src="../js/components.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Auth guard
+        const user = UCAuth.requireAuth(['admin']);
+        UCComponents.initTheme();
+
+        // Render sidebar + topbar
+        document.getElementById('sidebar-content').innerHTML = UCComponents.renderSidebar('overview');
+        document.getElementById('topbar').innerHTML = UCComponents.renderTopbar('Overview', 'Real-time city intelligence dashboard');
+
+        // KPI definitions
+        const kpis = [
+            { key: 'totalBins', label: 'Total Bins', icon: '🗑️', suffix: '', cls: 'stat-accent', delta: '+2 this week', dir: 'up' },
+            { key: 'urgentBins', label: 'Urgent Bins', icon: '⚠️', suffix: '', cls: 'stat-danger', delta: '4 overflowing', dir: 'down' },
+            { key: 'activeTrucks', label: 'Active Trucks', icon: '🚛', suffix: '', cls: 'stat-success', delta: 'of 5 total', dir: 'neutral' },
+            { key: 'efficiency', label: 'Efficiency', icon: '📈', suffix: '%', cls: 'stat-purple', delta: '+2.1% vs yesterday', dir: 'up' },
+            { key: 'tripsAvoided', label: 'Trips Avoided', icon: '🛣️', suffix: '', cls: 'stat-warning', delta: 'Saved today', dir: 'up' },
+            { key: 'avgResponse', label: 'Avg Response', icon: '⏱️', suffix: 'm', cls: 'stat-accent', delta: 'minutes', dir: 'neutral' }
+        ];
+
+        function renderKPIs() {
+            const m = UCData.metrics;
+            const grid = document.getElementById('kpi-grid');
+            grid.innerHTML = kpis.map((k, i) => `
+      <div class="stat-card ${k.cls} kpi-card" style="--i:${i};">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="font-size:22px;">${k.icon}</div>
+          <span class="badge badge-${k.dir === 'up' ? 'success' : k.dir === 'down' ? 'danger' : 'muted'}" style="font-size:10px;">LIVE</span>
+        </div>
+        <div class="stat-value" id="kpi-${k.key}">${m[k.key]}${k.suffix}</div>
+        <div class="stat-label">${k.label}</div>
+        <div class="stat-delta ${k.dir}" style="margin-top:8px;">
+          ${k.dir === 'up' ? '↑' : k.dir === 'down' ? '↓' : '•'} ${k.delta}
+        </div>
+      </div>
+    `).join('');
+            // Animate counts
+            setTimeout(() => {
+                kpis.forEach(k => {
+                    const el = document.getElementById('kpi-' + k.key);
+                    if (el) UCComponents.animateCount(el, m[k.key], k.suffix);
+                });
+            }, 100);
+        }
+
+        renderKPIs();
+
+        // ---- Leaflet Map ----
+        const map = L.map('main-map').setView([19.076, 72.877], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors', maxZoom: 18
+        }).addTo(map);
+
+        // Bin markers
+        let binMarkers = {};
+        let currentFilter = 'all';
+
+        function makeBinIcon(color) {
+            return L.divIcon({
+                className: '',
+                html: `<div style="width:13px;height:13px;border-radius:50%;background:${color};border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>`,
+                iconSize: [13, 13], iconAnchor: [6, 6]
+            });
+        }
+
+        function makeTruckIcon() {
+            return L.divIcon({
+                className: '',
+                html: `<div style="width:22px;height:22px;border-radius:6px;background:#3B82F6;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:12px;">🚛</div>`,
+                iconSize: [22, 22], iconAnchor: [11, 11]
+            });
+        }
+
+        UCData.bins.forEach(bin => {
+            const color = UCData.getBinColor(bin.status);
+            const marker = L.marker([bin.lat, bin.lng], { icon: makeBinIcon(color) })
+                .bindPopup(`
+        <div style="font-family:Inter,sans-serif;padding:4px;">
+          <div style="font-size:13px;font-weight:700;margin-bottom:4px;">${bin.id}</div>
+          <div style="font-size:12px;color:#64748B;">${bin.zone}</div>
+          <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+            <div style="flex:1;height:6px;border-radius:100px;background:#E2E8F0;overflow:hidden;">
+              <div style="height:100%;width:${bin.fill}%;background:${color};border-radius:100px;"></div>
+            </div>
+            <span style="font-size:12px;font-weight:700;color:${color};">${bin.fill}%</span>
+          </div>
+          <div style="font-size:11px;color:#94A3B8;margin-top:4px;">Overflow in ~${bin.prediction}</div>
+        </div>
+      `, { maxWidth: 200 })
+                .addTo(map);
+            binMarkers[bin.id] = { marker, bin };
+        });
+
+        // Truck markers
+        let truckMarkers = {};
+        UCData.trucks.filter(t => t.status === 'active').forEach(truck => {
+            const m = L.marker([truck.lat, truck.lng], { icon: makeTruckIcon() })
+                .bindPopup(`<div style="font-family:Inter,sans-serif;padding:4px;"><div style="font-weight:700;">${truck.id}</div><div style="font-size:12px;color:#64748B;">${truck.driver}</div><div style="font-size:12px;margin-top:4px;">Capacity: ${truck.capacity}%</div></div>`)
+                .addTo(map);
+            truckMarkers[truck.id] = m;
+        });
+
+        // Route polylines
+        const routeColors = ['#3B82F6', '#22C55E', '#8B5CF6'];
+        UCData.routes.forEach((route, i) => {
+            L.polyline(route.waypoints, { color: routeColors[i % 3], weight: 3, opacity: 0.7, dashArray: '6 4' }).addTo(map);
+        });
+
+        function filterMap(status, btn) {
+            currentFilter = status;
+            document.querySelectorAll('.map-toolbar .chip').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            Object.values(binMarkers).forEach(({ marker, bin }) => {
+                if (status === 'all' || bin.status === status) {
+                    marker.addTo(map);
+                } else {
+                    map.removeLayer(marker);
+                }
+            });
+        }
+
+        // ---- Activity Feed ----
+        function renderFeed() {
+            const feed = document.getElementById('activity-feed');
+            feed.innerHTML = UCData.activityFeed.map(a => {
+                const dotClass = { danger: 'dot-danger', success: 'dot-success', warning: 'dot-warning', accent: 'dot-accent' }[a.color] || 'dot-muted';
+                return `
+        <div class="activity-item fade-in">
+          <div class="activity-dot ${dotClass}" style="margin-top:6px;width:8px;height:8px;flex-shrink:0;"></div>
+          <div>
+            <div class="activity-text">${a.icon} ${a.msg}</div>
+            <div class="activity-time">${a.time}</div>
+          </div>
+        </div>`;
+            }).join('');
+        }
+        renderFeed();
+
+        // ---- Simulation ----
+        UCSimulation.on('truckMoved', ({ truck }) => {
+            const m = truckMarkers[truck.id];
+            if (m) m.setLatLng([truck.lat, truck.lng]);
+        });
+
+        UCSimulation.on('binUpdated', ({ bin }) => {
+            const entry = binMarkers[bin.id];
+            if (!entry) return;
+            const color = UCData.getBinColor(bin.status);
+            entry.marker.setIcon(makeBinIcon(color));
+            entry.bin = bin;
+            if (currentFilter !== 'all' && bin.status !== currentFilter) {
+                map.removeLayer(entry.marker);
+            } else {
+                entry.marker.addTo(map);
+            }
+        });
+
+        UCSimulation.on('overflowAlert', ({ bin }) => {
+            toast.error('Overflow Alert!', `${bin.id} (${bin.zone}) has reached ${bin.fill}% fill`, 5000);
+        });
+
+        UCSimulation.on('metricsUpdated', ({ metrics }) => {
+            kpis.forEach(k => {
+                const el = document.getElementById('kpi-' + k.key);
+                if (el) el.textContent = metrics[k.key] + k.suffix;
+            });
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const alertEl = document.getElementById('alert-val');
+            if (alertEl) alertEl.textContent = metrics.overflowAlerts;
+        });
+
+        UCSimulation.on('activityUpdated', () => {
+            renderFeed();
+        });
+
+        UCSimulation.start();
+
+        // ---- Export Modal ----
+        function openExportModal() {
+            document.getElementById('export-modal').classList.add('open');
+        }
+        function closeExportModal() {
+            document.getElementById('export-modal').classList.remove('open');
+        }
+        function handleExport() {
+            const type = document.getElementById('export-type').value;
+            const fmt = document.getElementById('export-format').value;
+            closeExportModal();
+            toast.success('Export started', `${type} (${fmt}) is being generated…`, 4000);
+        }
+    </script>
+</body>
+
+</html>
